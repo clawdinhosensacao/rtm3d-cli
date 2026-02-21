@@ -40,6 +40,7 @@ T parse_num(const std::string& s, const std::string& name);
 
 template <>
 std::size_t parse_num<std::size_t>(const std::string& s, const std::string& name) {
+  if (s.empty() || s.front() == '-') throw std::runtime_error("invalid value for " + name + ": " + s);
   std::size_t p = 0;
   auto v = std::stoull(s, &p);
   if (p != s.size()) throw std::runtime_error("invalid value for " + name + ": " + s);

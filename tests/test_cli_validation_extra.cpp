@@ -22,3 +22,8 @@ TEST(CliOptionsExtra, RejectsInvalidConfigOutputFormat) {
   const char* argv[] = {"rtm3d_cli", "--config", "tests/tmp_loader/cfg_bad_format.json"};
   EXPECT_THROW((void)rtm3d::parse_cli_or_throw(static_cast<int>(std::size(argv)), const_cast<char**>(argv)), std::runtime_error);
 }
+
+TEST(CliOptionsExtra, RejectsNegativeUnsignedOption) {
+  const char* argv[] = {"rtm3d_cli", "--data-dir", "data", "--decim-x", "-1"};
+  EXPECT_THROW((void)rtm3d::parse_cli_or_throw(static_cast<int>(std::size(argv)), const_cast<char**>(argv)), std::runtime_error);
+}

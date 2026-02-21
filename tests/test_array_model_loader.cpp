@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <fstream>
 
 #include <gtest/gtest.h>
@@ -7,7 +8,7 @@
 
 TEST(ArrayModelLoader, Parse1DAnd2DJson) {
   const std::string d = "tests/tmp_loader";
-  std::system(("mkdir -p " + d).c_str());
+  std::filesystem::create_directories(d);
   std::ofstream(d + "/x.json") << "[0, 25, 50, 75]";
   std::ofstream(d + "/z.json") << "[0, 10, 20]";
   std::ofstream(d + "/v.json") << "[[1500,1510,1520,1530],[1600,1610,1620,1630],[1700,1710,1720,1730]]";

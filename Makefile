@@ -33,5 +33,19 @@ run: build/rtm3d_cli
 	mkdir -p output
 	./build/rtm3d_cli --data-dir data --output output/migrated_inline.pgm
 
+static:
+	@if command -v clang-tidy >/dev/null 2>&1; then \
+		echo "[static] running clang-tidy"; \
+		clang-tidy $$(find src -name '*.cpp' -type f | tr '\n' ' ') -- -std=c++20 -Iinclude; \
+	elif command -v cppcheck >/dev/null 2>&1; then \
+		echo "[static] running cppcheck"; \
+		cppcheck --enable=warning,style,performance --std=c++20 --language=c++ -Iinclude src; \
+	else \
+		echo "[static] clang-tidy/cppcheck not found; running g++ -fanalyzer fallback"; \
+		for f in src/io/*.cpp src/rtm/*.cpp src/cli/*.cpp src/main.cpp; do \
+			g++ -std=c++20 -Wall -Wextra -Wpedantic -fanalyzer -Iinclude -fsyntax-only $$f; \
+		done; \
+	fi
+
 clean:
 	rm -rf build output/*.pgm output/*.png

@@ -35,6 +35,18 @@ std::string json_find_number_token(const std::string& s, const std::string& key)
   return "";
 }
 
+void apply_data_dir(CliOptions& o, const std::string& dir) {
+  o.x_file = dir + "/x.json";
+  o.z_file = dir + "/z.json";
+  o.values_file = dir + "/vel.json";
+}
+
+OutputFormat parse_output_format_or_throw(const std::string& token, const std::string& source) {
+  if (token == "pgm8") return OutputFormat::kPgm8;
+  if (token == "float32_raw") return OutputFormat::kFloat32Raw;
+  throw std::runtime_error("invalid output format in " + source + ": " + token);
+}
+
 template <typename T>
 T parse_num(const std::string& s, const std::string& name);
 
@@ -59,9 +71,7 @@ void apply_json_config(CliOptions& o, const std::string& path) {
   const auto s = slurp_file(path);
 
   if (const auto dir = json_find_string(s, "data_dir"); !dir.empty()) {
-    o.x_file = dir + "/x.json";
-    o.z_file = dir + "/z.json";
-    o.values_file = dir + "/vel.json";
+    apply_data_dir(o, dir);
   }
   if (const auto v = json_find_string(s, "x_file"); !v.empty()) o.x_file = v;
   if (const auto v = json_find_string(s, "z_file"); !v.empty()) o.z_file = v;
@@ -69,9 +79,7 @@ void apply_json_config(CliOptions& o, const std::string& path) {
   if (const auto v = json_find_string(s, "output_file"); !v.empty()) o.output_file = v;
 
   if (const auto v = json_find_string(s, "output_format"); !v.empty()) {
-    if (v == "pgm8") o.output_format = OutputFormat::kPgm8;
-    else if (v == "float32_raw") o.output_format = OutputFormat::kFloat32Raw;
-    else throw std::runtime_error("invalid output_format in config: " + v);
+    o.output_format = parse_output_format_or_throw(v, "config");
   }
 
   if (const auto v = json_find_number_token(s, "decim_x"); !v.empty()) o.load.decim_x = parse_num<std::size_t>(v, "decim_x");
@@ -132,10 +140,7 @@ CliOptions parse_cli_or_throw(int argc, char** argv) {
     if (arg == "--config") {
       apply_json_config(o, require_value(argc, argv, i));
     } else if (arg == "--data-dir") {
-      const auto dir = require_value(argc, argv, i);
-      o.x_file = dir + "/x.json";
-      o.z_file = dir + "/z.json";
-      o.values_file = dir + "/vel.json";
+      apply_data_dir(o, require_value(argc, argv, i));
     } else if (arg == "--x-file") {
       o.x_file = require_value(argc, argv, i);
     } else if (arg == "--z-file") {
@@ -145,10 +150,7 @@ CliOptions parse_cli_or_throw(int argc, char** argv) {
     } else if (arg == "--output") {
       o.output_file = require_value(argc, argv, i);
     } else if (arg == "--output-format") {
-      const auto v = require_value(argc, argv, i);
-      if (v == "pgm8") o.output_format = OutputFormat::kPgm8;
-      else if (v == "float32_raw") o.output_format = OutputFormat::kFloat32Raw;
-      else throw std::runtime_error("invalid --output-format: " + v);
+      o.output_format = parse_output_format_or_throw(require_value(argc, argv, i), "--output-format");
     } else if (arg == "--decim-x") {
       o.load.decim_x = parse_num<std::size_t>(require_value(argc, argv, i), "--decim-x");
     } else if (arg == "--decim-z") {

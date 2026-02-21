@@ -6,7 +6,12 @@ cd "$ROOT"
 
 mkdir -p data/synthetic artifacts
 
-python3 scripts/generate_synthetic_model.py --out-dir data/synthetic --nx 160 --nz 96 --nt 280 --dt 0.001 --f0 16
+python3 scripts/generate_synthetic_model.py --out-dir data/synthetic --nx 160 --nz 96 --nt 280 --dt 0.001 --f0 16 --seed 17
+sha_a="$(sha256sum data/synthetic/shot_0001_gather.bin | awk '{print $1}')"
+python3 scripts/generate_synthetic_model.py --out-dir data/synthetic --nx 160 --nz 96 --nt 280 --dt 0.001 --f0 16 --seed 17
+sha_b="$(sha256sum data/synthetic/shot_0001_gather.bin | awk '{print $1}')"
+[[ "$sha_a" == "$sha_b" ]] || { echo "non-deterministic synthetic gather for same seed"; exit 1; }
+
 ./build/rtm3d_cli --config configs/synthetic_benchmark.json
 python3 scripts/float32_to_png.py --input artifacts/synthetic_migrated_inline.bin --meta artifacts/synthetic_migrated_inline.bin.json --output artifacts/synthetic_migrated_inline.png
 

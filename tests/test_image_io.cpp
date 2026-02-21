@@ -10,7 +10,7 @@ TEST(ImageIO, WritesPGMFile) {
   img[50] = 1.0f;
   rtm3d::write_pgm("output/test_inline.pgm", img, 10, 10);
   ASSERT_TRUE(std::filesystem::exists("output/test_inline.pgm"));
-  ASSERT_GT(std::filesystem::file_size("output/test_inline.pgm"), 20);
+  ASSERT_GT(std::filesystem::file_size("output/test_inline.pgm"), 20u);
 }
 
 TEST(ImageIO, RejectsShapeMismatch) {

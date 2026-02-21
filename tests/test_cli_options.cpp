@@ -12,8 +12,8 @@ TEST(CliOptions, ParsesDataDirAndRtmSettings) {
   ASSERT_EQ(o.x_file, "data/x.json");
   ASSERT_EQ(o.z_file, "data/z.json");
   ASSERT_EQ(o.values_file, "data/vel.json");
-  ASSERT_EQ(o.load.decim_x, 10);
-  ASSERT_EQ(o.rtm.nt, 100);
+  ASSERT_EQ(o.load.decim_x, 10u);
+  ASSERT_EQ(o.rtm.nt, 100u);
   ASSERT_EQ(o.output_file, "output/a.pgm");
 }
 

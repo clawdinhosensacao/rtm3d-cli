@@ -14,14 +14,14 @@ TEST(ArrayModelLoader, Parse1DAnd2DJson) {
 
   const auto x = rtm3d::load_array_1d_json(d + "/x.json");
   const auto v = rtm3d::load_array_2d_json(d + "/v.json");
-  ASSERT_EQ(x.size(), 4);
-  ASSERT_EQ(v.size(), 3);
+  ASSERT_EQ(x.size(), 4u);
+  ASSERT_EQ(v.size(), 3u);
   ASSERT_EQ(v[1][2], 1620);
 }
 
 TEST(GridModelLoader, DecimationAndCropWorks) {
   const auto model = rtm3d::load_grid_model_from_json_arrays("data/x.json", "data/z.json", "data/vel.json", {.decim_x = 20, .decim_z = 20, .crop_x = 30, .crop_z = 20});
-  ASSERT_EQ(model.nx, 30);
+  ASSERT_EQ(model.nx, 30u);
   ASSERT_GT(model.nz, 0u);
   ASSERT_LE(model.nz, 20u);
   ASSERT_GT(model.dx, 0.0f);

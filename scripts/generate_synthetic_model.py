@@ -58,14 +58,15 @@ def gaussian2d(xx: np.ndarray, zz: np.ndarray, x0: float, z0: float, sx: float, 
     return np.exp(-(((xx - x0) / sx) ** 2 + ((zz - z0) / sz) ** 2)).astype(np.float32)
 
 
-def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int) -> np.ndarray:
+def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int, include_salt: bool = True) -> np.ndarray:
     rng = np.random.default_rng(seed)
     x = np.arange(nx, dtype=np.float32) * dx
     z = np.arange(nz, dtype=np.float32) * dz
     xx, zz = np.meshgrid(x, z)
 
-    # Layered depth trend (compaction)
-    vel = (1500.0 + 0.85 * zz).astype(np.float32)
+    # Layered depth trend (compaction) + mild dipping/undulated stratigraphy
+    dip = 0.18 * zz + 45.0 * np.sin(2.0 * math.pi * xx / (nx * dx * 1.4))
+    vel = (1500.0 + 0.85 * zz + 55.0 * np.sin(2.0 * math.pi * dip / (nz * dz * 0.55))).astype(np.float32)
 
     # Meandering channel (slow anomaly)
     center = 0.55 * nx * dx + 0.12 * nx * dx * np.sin(2.0 * math.pi * zz / (nz * dz * 0.8))
@@ -88,6 +89,12 @@ def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int) -> np.ndar
     fault_term = (0.22 * shifted_zz - 0.22 * zz).astype(np.float32)
     vel += fault_term
 
+    # Optional salt-like high-velocity body to increase complexity
+    if include_salt:
+        salt = gaussian2d(xx, zz, 0.52 * nx * dx, 0.58 * nz * dz, 0.11 * nx * dx, 0.12 * nz * dz)
+        salt_top_taper = 1.0 / (1.0 + np.exp(-(zz - 0.38 * nz * dz) / max(1.0, 0.03 * nz * dz)))
+        vel += 620.0 * salt * salt_top_taper.astype(np.float32)
+
     # Small correlated heterogeneity
     noise = rng.normal(0.0, 1.0, size=(nz, nx)).astype(np.float32)
     noise = (noise + np.roll(noise, 1, 0) + np.roll(noise, -1, 0) + np.roll(noise, 1, 1) + np.roll(noise, -1, 1)) / 5.0
@@ -96,7 +103,7 @@ def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int) -> np.ndar
     return np.clip(vel, 1450.0, 5200.0).astype(np.float32)
 
 
-def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float, f0: float) -> Tuple[np.ndarray, GatherMeta]:
+def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float, f0: float, seed: int) -> Tuple[np.ndarray, GatherMeta]:
     nz, nx = vel.shape
     nrec = max(24, nx // 2)
     shot_ix = nx // 2
@@ -131,7 +138,7 @@ def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float,
     # weak coherent noise + geometric decay shaping
     time_gain = (1.0 + 0.5 * np.linspace(0, 1, nt, dtype=np.float32)).reshape(1, -1)
     g *= time_gain
-    g += 0.02 * np.random.default_rng(123).normal(size=g.shape).astype(np.float32)
+    g += 0.02 * np.random.default_rng(seed + 101).normal(size=g.shape).astype(np.float32)
 
     meta = GatherMeta(
         n_receivers=int(nrec),
@@ -194,12 +201,13 @@ def main() -> int:
     ap.add_argument("--dt", type=float, default=0.001)
     ap.add_argument("--f0", type=float, default=18.0)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--no-salt", action="store_true", help="Disable salt-like high-velocity body")
     args = ap.parse_args()
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    vel = build_velocity(args.nx, args.nz, args.dx, args.dz, args.seed)
+    vel = build_velocity(args.nx, args.nz, args.dx, args.dz, args.seed, include_salt=not args.no_salt)
     x = (np.arange(args.nx, dtype=np.float32) * args.dx).tolist()
     z = (np.arange(args.nz, dtype=np.float32) * args.dz).tolist()
 
@@ -212,7 +220,7 @@ def main() -> int:
     (out / "velocity_model.bin").write_bytes(vel.astype("<f4", copy=False).tobytes())
     (out / "velocity_model.bin.json").write_text(json.dumps(asdict(ModelMeta(args.nx, args.nz, args.dx, args.dz)), indent=2))
 
-    gather, gmeta = synthesize_gather(vel, args.dx, args.dz, args.nt, args.dt, args.f0)
+    gather, gmeta = synthesize_gather(vel, args.dx, args.dz, args.nt, args.dt, args.f0, seed=args.seed)
     (out / "shot_0001_gather.bin").write_bytes(gather.astype("<f4", copy=False).tobytes())
     (out / "shot_0001_gather.bin.json").write_text(json.dumps(asdict(gmeta), indent=2))
 

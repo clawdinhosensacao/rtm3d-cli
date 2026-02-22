@@ -14,24 +14,51 @@ sha_b="$(sha256sum data/synthetic/shot_0001_gather.bin | awk '{print $1}')"
 
 ./build/rtm3d_cli --config configs/synthetic_benchmark.json
 python3 scripts/float32_to_png.py --input artifacts/synthetic_migrated_inline.bin --meta artifacts/synthetic_migrated_inline.bin.json --output artifacts/synthetic_migrated_inline.png
+cp artifacts/synthetic_migrated_inline.bin artifacts/synthetic_migrated_inline_seed17.bin
+cp artifacts/synthetic_migrated_inline.bin.json artifacts/synthetic_migrated_inline_seed17.bin.json
+
+python3 scripts/generate_synthetic_model.py --out-dir data/synthetic --nx 160 --nz 96 --nt 280 --dt 0.001 --f0 16 --seed 18
+./build/rtm3d_cli --config configs/synthetic_benchmark.json
+cp artifacts/synthetic_migrated_inline.bin artifacts/synthetic_migrated_inline_seed18.bin
+cp artifacts/synthetic_migrated_inline.bin.json artifacts/synthetic_migrated_inline_seed18.bin.json
 
 python3 - <<'PY'
 import json
 import numpy as np
 from pathlib import Path
 
-out = Path('artifacts/synthetic_migrated_inline.bin')
-meta = Path('artifacts/synthetic_migrated_inline.bin.json')
+seed17 = Path('artifacts/synthetic_migrated_inline_seed17.bin')
+seed18 = Path('artifacts/synthetic_migrated_inline_seed18.bin')
+meta17 = Path('artifacts/synthetic_migrated_inline_seed17.bin.json')
 png = Path('artifacts/synthetic_migrated_inline.png')
-assert out.exists(), 'missing float output'
-assert meta.exists(), 'missing metadata'
+assert seed17.exists(), 'missing seed17 float output'
+assert seed18.exists(), 'missing seed18 float output'
+assert meta17.exists(), 'missing metadata'
 assert png.exists(), 'missing png preview'
 
-m = json.loads(meta.read_text())
-arr = np.fromfile(out, dtype='<f4')
-assert arr.size == m['nx'] * m['nz'], 'shape mismatch'
-assert np.isfinite(arr).all(), 'non-finite values'
-energy = float(np.sum(np.abs(arr)))
-assert energy > 0.0, 'zero energy image'
-print('e2e_ok energy=', energy)
+m = json.loads(meta17.read_text())
+a = np.fromfile(seed17, dtype='<f4')
+b = np.fromfile(seed18, dtype='<f4')
+assert a.size == m['nx'] * m['nz'], 'shape mismatch seed17'
+assert b.size == a.size, 'shape mismatch seed18'
+assert np.isfinite(a).all() and np.isfinite(b).all(), 'non-finite values'
+
+# 1) normalized energy
+energy_norm = float(np.mean(np.abs(a)))
+assert energy_norm > 1e-5, f'low normalized energy: {energy_norm}'
+
+# 2) focus proxy: gradient energy ratio
+ax = a.reshape(m['nz'], m['nx'])
+gx = np.diff(ax, axis=1)
+gz = np.diff(ax, axis=0)
+focus = float((np.mean(np.abs(gx)) + np.mean(np.abs(gz))) / (np.mean(np.abs(ax)) + 1e-8))
+assert focus > 0.08, f'focus too low: {focus}'
+
+# 3) cross-seed stability: similar total energy (not identical image)
+energy_a = float(np.sum(np.abs(a)))
+energy_b = float(np.sum(np.abs(b)))
+ratio = abs(energy_a - energy_b) / max(energy_a, energy_b, 1e-8)
+assert ratio < 0.35, f'seed stability energy drift too high: {ratio}'
+
+print('e2e_ok energy_norm=', energy_norm, 'focus=', focus, 'seed_energy_drift=', ratio)
 PY

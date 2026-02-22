@@ -95,13 +95,17 @@ def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int,
     vel += fault_term
 
     # Scenario-specific structures
-    if scenario not in {"layered_fault", "salt_dome"}:
+    if scenario not in {"layered_fault", "salt_dome", "circle_lens"}:
         raise ValueError(f"unsupported scenario: {scenario}")
 
     if scenario == "salt_dome" and include_salt:
         salt = gaussian2d(xx, zz, 0.52 * nx * dx, 0.58 * nz * dz, 0.11 * nx * dx, 0.12 * nz * dz)
         salt_top_taper = 1.0 / (1.0 + np.exp(-(zz - 0.38 * nz * dz) / max(1.0, 0.03 * nz * dz)))
         vel += 620.0 * salt * salt_top_taper.astype(np.float32)
+
+    if scenario == "circle_lens":
+        lens = gaussian2d(xx, zz, 0.48 * nx * dx, 0.52 * nz * dz, 0.14 * nx * dx, 0.14 * nz * dz)
+        vel += 380.0 * lens
 
     # Small correlated heterogeneity
     noise = rng.normal(0.0, 1.0, size=(nz, nx)).astype(np.float32)
@@ -218,7 +222,7 @@ def main() -> int:
     ap.add_argument("--dt", type=float, default=0.001)
     ap.add_argument("--f0", type=float, default=18.0)
     ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument("--scenario", choices=["layered_fault", "salt_dome"], default="salt_dome",
+    ap.add_argument("--scenario", choices=["layered_fault", "salt_dome", "circle_lens"], default="salt_dome",
                     help="Synthetic structural scenario")
     ap.add_argument("--snr-db", type=float, default=26.0, help="Target SNR (dB) for additive random noise")
     ap.add_argument("--no-salt", action="store_true", help="Disable salt-like high-velocity body")

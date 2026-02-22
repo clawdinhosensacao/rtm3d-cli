@@ -41,6 +41,8 @@ class GatherMeta:
     shot_z: float
     receiver_x0: float
     receiver_dx: float
+    snr_db: float
+    noise_seed: int
     dtype: str = "float32"
     order: str = "row-major [n_receivers][nt]"
     units: str = "arbitrary amplitude"
@@ -103,7 +105,8 @@ def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int, include_sa
     return np.clip(vel, 1450.0, 5200.0).astype(np.float32)
 
 
-def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float, f0: float, seed: int) -> Tuple[np.ndarray, GatherMeta]:
+def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float, f0: float, seed: int,
+                      snr_db: float) -> Tuple[np.ndarray, GatherMeta]:
     nz, nx = vel.shape
     nrec = max(24, nx // 2)
     shot_ix = nx // 2
@@ -135,10 +138,16 @@ def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float,
             i1 = min(nt, it0 + len(w))
             g[ir, it0:i1] += refl * w[: i1 - it0]
 
-    # weak coherent noise + geometric decay shaping
+    # weak geometric shaping + controlled random noise (SNR-based)
     time_gain = (1.0 + 0.5 * np.linspace(0, 1, nt, dtype=np.float32)).reshape(1, -1)
     g *= time_gain
-    g += 0.02 * np.random.default_rng(seed + 101).normal(size=g.shape).astype(np.float32)
+
+    rng = np.random.default_rng(seed + 101)
+    noise = rng.normal(size=g.shape).astype(np.float32)
+    signal_rms = float(np.sqrt(np.mean(g * g) + 1e-12))
+    noise_rms = float(np.sqrt(np.mean(noise * noise) + 1e-12))
+    target_noise_rms = signal_rms / (10.0 ** (snr_db / 20.0))
+    g += noise * (target_noise_rms / noise_rms)
 
     meta = GatherMeta(
         n_receivers=int(nrec),
@@ -148,6 +157,8 @@ def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float,
         shot_z=float(shot_iz * dz),
         receiver_x0=float(rec_ix[0] * dx),
         receiver_dx=float(rec_dx * dx),
+        snr_db=float(snr_db),
+        noise_seed=int(seed + 101),
     )
     return g, meta
 
@@ -201,6 +212,7 @@ def main() -> int:
     ap.add_argument("--dt", type=float, default=0.001)
     ap.add_argument("--f0", type=float, default=18.0)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--snr-db", type=float, default=26.0, help="Target SNR (dB) for additive random noise")
     ap.add_argument("--no-salt", action="store_true", help="Disable salt-like high-velocity body")
     args = ap.parse_args()
 
@@ -220,7 +232,8 @@ def main() -> int:
     (out / "velocity_model.bin").write_bytes(vel.astype("<f4", copy=False).tobytes())
     (out / "velocity_model.bin.json").write_text(json.dumps(asdict(ModelMeta(args.nx, args.nz, args.dx, args.dz)), indent=2))
 
-    gather, gmeta = synthesize_gather(vel, args.dx, args.dz, args.nt, args.dt, args.f0, seed=args.seed)
+    gather, gmeta = synthesize_gather(vel, args.dx, args.dz, args.nt, args.dt, args.f0,
+                                     seed=args.seed, snr_db=args.snr_db)
     (out / "shot_0001_gather.bin").write_bytes(gather.astype("<f4", copy=False).tobytes())
     (out / "shot_0001_gather.bin.json").write_text(json.dumps(asdict(gmeta), indent=2))
 

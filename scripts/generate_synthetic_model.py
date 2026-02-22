@@ -27,6 +27,7 @@ class ModelMeta:
     nz: int
     dx: float
     dz: float
+    scenario: str
     dtype: str = "float32"
     order: str = "row-major [nz][nx]"
     units: str = "m/s"
@@ -60,7 +61,9 @@ def gaussian2d(xx: np.ndarray, zz: np.ndarray, x0: float, z0: float, sx: float, 
     return np.exp(-(((xx - x0) / sx) ** 2 + ((zz - z0) / sz) ** 2)).astype(np.float32)
 
 
-def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int, include_salt: bool = True) -> np.ndarray:
+def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int,
+                   include_salt: bool = True,
+                   scenario: str = "salt_dome") -> np.ndarray:
     rng = np.random.default_rng(seed)
     x = np.arange(nx, dtype=np.float32) * dx
     z = np.arange(nz, dtype=np.float32) * dz
@@ -91,8 +94,11 @@ def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int, include_sa
     fault_term = (0.22 * shifted_zz - 0.22 * zz).astype(np.float32)
     vel += fault_term
 
-    # Optional salt-like high-velocity body to increase complexity
-    if include_salt:
+    # Scenario-specific structures
+    if scenario not in {"layered_fault", "salt_dome"}:
+        raise ValueError(f"unsupported scenario: {scenario}")
+
+    if scenario == "salt_dome" and include_salt:
         salt = gaussian2d(xx, zz, 0.52 * nx * dx, 0.58 * nz * dz, 0.11 * nx * dx, 0.12 * nz * dz)
         salt_top_taper = 1.0 / (1.0 + np.exp(-(zz - 0.38 * nz * dz) / max(1.0, 0.03 * nz * dz)))
         vel += 620.0 * salt * salt_top_taper.astype(np.float32)
@@ -212,6 +218,8 @@ def main() -> int:
     ap.add_argument("--dt", type=float, default=0.001)
     ap.add_argument("--f0", type=float, default=18.0)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--scenario", choices=["layered_fault", "salt_dome"], default="salt_dome",
+                    help="Synthetic structural scenario")
     ap.add_argument("--snr-db", type=float, default=26.0, help="Target SNR (dB) for additive random noise")
     ap.add_argument("--no-salt", action="store_true", help="Disable salt-like high-velocity body")
     args = ap.parse_args()
@@ -219,7 +227,9 @@ def main() -> int:
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    vel = build_velocity(args.nx, args.nz, args.dx, args.dz, args.seed, include_salt=not args.no_salt)
+    vel = build_velocity(args.nx, args.nz, args.dx, args.dz, args.seed,
+                         include_salt=not args.no_salt,
+                         scenario=args.scenario)
     x = (np.arange(args.nx, dtype=np.float32) * args.dx).tolist()
     z = (np.arange(args.nz, dtype=np.float32) * args.dz).tolist()
 
@@ -230,7 +240,9 @@ def main() -> int:
 
     # Float32 model deliverable
     (out / "velocity_model.bin").write_bytes(vel.astype("<f4", copy=False).tobytes())
-    (out / "velocity_model.bin.json").write_text(json.dumps(asdict(ModelMeta(args.nx, args.nz, args.dx, args.dz)), indent=2))
+    (out / "velocity_model.bin.json").write_text(
+        json.dumps(asdict(ModelMeta(args.nx, args.nz, args.dx, args.dz, args.scenario)), indent=2)
+    )
 
     gather, gmeta = synthesize_gather(vel, args.dx, args.dz, args.nt, args.dt, args.f0,
                                      seed=args.seed, snr_db=args.snr_db)

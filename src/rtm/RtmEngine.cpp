@@ -6,6 +6,7 @@
 
 #include "Boundary.hpp"
 #include "Geometry.hpp"
+#include "Imaging.hpp"
 #include "Propagation.hpp"
 #include "rtm3d/core/Volume3D.hpp"
 
@@ -58,7 +59,7 @@ void receiver_backpropagation_and_imaging(const GridModel2D& model, const RtmCon
     rtm_internal::inject_receivers(vel, sy, sz, rx, rec_data, it, rec_nxt);
 
     const auto* src = src_snaps.data() + it * n;
-    for (std::size_t i = 0; i < n; ++i) image[i] += src[i] * rec_nxt[i];
+    rtm_internal::accumulate_cross_correlation_image(src, rec_nxt, image);
 
     rec_prev.swap(rec_cur);
     rec_cur.swap(rec_nxt);

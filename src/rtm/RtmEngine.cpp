@@ -4,6 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "Boundary.hpp"
 #include "Geometry.hpp"
 #include "rtm3d/core/Volume3D.hpp"
 
@@ -37,24 +38,6 @@ void step_fd3d(const Volume3D& vel, const std::vector<float>& damp, float dt, fl
       }
     }
   }
-}
-
-std::vector<float> make_damp(std::size_t nx, std::size_t ny, std::size_t nz, std::size_t pml) {
-  std::vector<float> d(nx * ny * nz, 1.0f);
-  for (std::size_t iz = 0; iz < nz; ++iz) {
-    for (std::size_t iy = 0; iy < ny; ++iy) {
-      for (std::size_t ix = 0; ix < nx; ++ix) {
-        const auto dist = std::min({ix, nx - 1 - ix, iy, ny - 1 - iy, iz, nz - 1 - iz});
-        float coeff = 1.0f;
-        if (dist < pml) {
-          const float x = static_cast<float>(pml - dist) / static_cast<float>(pml);
-          coeff = std::exp(-0.03f * x * x);
-        }
-        d[(iz * ny + iy) * nx + ix] = coeff;
-      }
-    }
-  }
-  return d;
 }
 
 void forward_source_propagation(const GridModel2D& model, const RtmConfig& cfg, const Volume3D& vel,
@@ -124,7 +107,7 @@ MigrationResult run_single_shot_rtm(const GridModel2D& model, const RtmConfig& c
   const Volume3D vel = rtm_internal::make_velocity_volume(model, cfg);
   const auto n = vel.size();
 
-  const auto damp = make_damp(vel.nx(), vel.ny(), vel.nz(), cfg.pml);
+  const auto damp = rtm_internal::make_damp(vel.nx(), vel.ny(), vel.nz(), cfg.pml);
   const auto wavelet = ricker_wavelet(cfg.nt, cfg.dt, cfg.f0);
 
   const std::size_t sx = vel.nx() / 2;

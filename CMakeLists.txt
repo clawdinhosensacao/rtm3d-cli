@@ -13,6 +13,7 @@ add_library(rtm3d
     src/io/ImageIO.cpp
     src/rtm/RtmEngine.cpp
     src/rtm/Geometry.cpp
+    src/rtm/Boundary.cpp
     src/cli/CliOptions.cpp
 )
 

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "Geometry.hpp"
 #include "rtm3d/core/Volume3D.hpp"
 
 namespace rtm3d {
@@ -56,41 +57,6 @@ std::vector<float> make_damp(std::size_t nx, std::size_t ny, std::size_t nz, std
   return d;
 }
 
-Volume3D make_velocity_volume(const GridModel2D& model, const RtmConfig& cfg) {
-  Volume3D vel(model.nx, cfg.ny, model.nz, 1500.0f);
-  for (std::size_t iz = 0; iz < model.nz; ++iz) {
-    for (std::size_t iy = 0; iy < cfg.ny; ++iy) {
-      for (std::size_t ix = 0; ix < model.nx; ++ix) {
-        vel(ix, iy, iz) = model.values[iz * model.nx + ix];
-      }
-    }
-  }
-  return vel;
-}
-
-std::vector<std::size_t> make_receiver_positions(const Volume3D& vel, std::size_t receiver_stride) {
-  const std::size_t nrec = std::max<std::size_t>(2, vel.nx() / receiver_stride);
-  std::vector<std::size_t> rx(nrec, 1);
-  for (std::size_t ir = 0; ir < nrec; ++ir) {
-    rx[ir] = std::min(1 + ir * receiver_stride, vel.nx() - 2);
-  }
-  return rx;
-}
-
-void record_receivers(const Volume3D& vel, std::size_t sy, std::size_t sz, const std::vector<std::size_t>& rx,
-                      const std::vector<float>& src_field, std::vector<float>& rec_data, std::size_t it) {
-  for (std::size_t ir = 0; ir < rx.size(); ++ir) {
-    rec_data[it * rx.size() + ir] = src_field[vel.index(rx[ir], sy, sz)];
-  }
-}
-
-void inject_receivers(const Volume3D& vel, std::size_t sy, std::size_t sz, const std::vector<std::size_t>& rx,
-                      const std::vector<float>& rec_data, std::size_t it, std::vector<float>& rec_field) {
-  for (std::size_t ir = 0; ir < rx.size(); ++ir) {
-    rec_field[vel.index(rx[ir], sy, sz)] += rec_data[it * rx.size() + ir];
-  }
-}
-
 void forward_source_propagation(const GridModel2D& model, const RtmConfig& cfg, const Volume3D& vel,
                                 const std::vector<float>& damp, const std::vector<float>& wavelet,
                                 std::size_t sx, std::size_t sy, std::size_t sz,
@@ -103,7 +69,7 @@ void forward_source_propagation(const GridModel2D& model, const RtmConfig& cfg, 
     step_fd3d(vel, damp, cfg.dt, model.dx, cfg.dy, model.dz, src_prev, src_cur, src_nxt);
     src_nxt[vel.index(sx, sy, sz)] += wavelet[it];
 
-    record_receivers(vel, sy, sz, rx, src_nxt, rec_data, it);
+    rtm_internal::record_receivers(vel, sy, sz, rx, src_nxt, rec_data, it);
     std::copy(src_nxt.begin(), src_nxt.end(), src_snaps.begin() + it * n);
 
     src_prev.swap(src_cur);
@@ -125,7 +91,7 @@ void receiver_backpropagation_and_imaging(const GridModel2D& model, const RtmCon
     const std::size_t it = cfg.nt - 1 - rit;
     step_fd3d(vel, damp, cfg.dt, model.dx, cfg.dy, model.dz, rec_prev, rec_cur, rec_nxt);
 
-    inject_receivers(vel, sy, sz, rx, rec_data, it, rec_nxt);
+    rtm_internal::inject_receivers(vel, sy, sz, rx, rec_data, it, rec_nxt);
 
     const auto* src = src_snaps.data() + it * n;
     for (std::size_t i = 0; i < n; ++i) image[i] += src[i] * rec_nxt[i];
@@ -133,17 +99,6 @@ void receiver_backpropagation_and_imaging(const GridModel2D& model, const RtmCon
     rec_prev.swap(rec_cur);
     rec_cur.swap(rec_nxt);
   }
-}
-
-std::vector<float> extract_inline_xz(const Volume3D& vel, const std::vector<float>& image) {
-  std::vector<float> inline_xz(vel.nx() * vel.nz(), 0.0f);
-  const std::size_t ymid = vel.ny() / 2;
-  for (std::size_t iz = 0; iz < vel.nz(); ++iz) {
-    for (std::size_t ix = 0; ix < vel.nx(); ++ix) {
-      inline_xz[iz * vel.nx() + ix] = image[vel.index(ix, ymid, iz)];
-    }
-  }
-  return inline_xz;
 }
 
 }  // namespace
@@ -166,7 +121,7 @@ std::vector<float> ricker_wavelet(std::size_t nt, float dt, float f0) {
 MigrationResult run_single_shot_rtm(const GridModel2D& model, const RtmConfig& cfg) {
   validate_cfg(model, cfg);
 
-  const Volume3D vel = make_velocity_volume(model, cfg);
+  const Volume3D vel = rtm_internal::make_velocity_volume(model, cfg);
   const auto n = vel.size();
 
   const auto damp = make_damp(vel.nx(), vel.ny(), vel.nz(), cfg.pml);
@@ -176,7 +131,7 @@ MigrationResult run_single_shot_rtm(const GridModel2D& model, const RtmConfig& c
   const std::size_t sy = vel.ny() / 2;
   const std::size_t sz = 2;
 
-  const auto rx = make_receiver_positions(vel, cfg.receiver_stride);
+  const auto rx = rtm_internal::make_receiver_positions(vel, cfg.receiver_stride);
   std::vector<float> src_snaps(cfg.nt * n, 0.0f);
   std::vector<float> rec_data(cfg.nt * rx.size(), 0.0f);
 
@@ -188,7 +143,7 @@ MigrationResult run_single_shot_rtm(const GridModel2D& model, const RtmConfig& c
   MigrationResult out;
   out.nx = vel.nx();
   out.nz = vel.nz();
-  out.inline_xz = extract_inline_xz(vel, image);
+  out.inline_xz = rtm_internal::extract_inline_xz(vel, image);
   return out;
 }
 

@@ -12,6 +12,7 @@ add_library(rtm3d
     src/io/GridModelLoader.cpp
     src/io/ImageIO.cpp
     src/rtm/RtmEngine.cpp
+    src/rtm/Geometry.cpp
     src/cli/CliOptions.cpp
 )
 

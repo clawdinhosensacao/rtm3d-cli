@@ -17,6 +17,16 @@ Generated artifacts:
 - `artifacts/synthetic_migrated_inline.bin` + `.json`
 - `artifacts/synthetic_migrated_inline.png`
 
+## Synthetic data previews
+
+Velocity model (synthetic):
+
+![Synthetic velocity model](docs/assets/velocity_model.png)
+
+Shot gather (synthetic):
+
+![Synthetic shot gather](docs/assets/shot_0001_gather.png)
+
 ## Synthetic model generator
 `scripts/generate_synthetic_model.py` creates a geology-inspired velocity model with:
 - depth velocity gradient

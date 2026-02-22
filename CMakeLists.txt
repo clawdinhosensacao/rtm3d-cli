@@ -14,6 +14,7 @@ add_library(rtm3d
     src/rtm/RtmEngine.cpp
     src/rtm/Geometry.cpp
     src/rtm/Boundary.cpp
+    src/rtm/Propagation.cpp
     src/cli/CliOptions.cpp
 )
 

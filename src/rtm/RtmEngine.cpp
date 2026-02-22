@@ -6,6 +6,7 @@
 
 #include "Boundary.hpp"
 #include "Geometry.hpp"
+#include "Propagation.hpp"
 #include "rtm3d/core/Volume3D.hpp"
 
 namespace rtm3d {
@@ -20,26 +21,6 @@ void validate_cfg(const GridModel2D& model, const RtmConfig& cfg) {
   if (cfg.pml == 0) throw std::runtime_error("pml must be > 0");
 }
 
-void step_fd3d(const Volume3D& vel, const std::vector<float>& damp, float dt, float dx, float dy,
-               float dz, const std::vector<float>& prev, const std::vector<float>& cur,
-               std::vector<float>& nxt) {
-  std::fill(nxt.begin(), nxt.end(), 0.0f);
-
-  for (std::size_t iz = 1; iz + 1 < vel.nz(); ++iz) {
-    for (std::size_t iy = 1; iy + 1 < vel.ny(); ++iy) {
-      for (std::size_t ix = 1; ix + 1 < vel.nx(); ++ix) {
-        const auto i = vel.index(ix, iy, iz);
-        const float d2x = (cur[vel.index(ix + 1, iy, iz)] - 2.0f * cur[i] + cur[vel.index(ix - 1, iy, iz)]) / (dx * dx);
-        const float d2y = (cur[vel.index(ix, iy + 1, iz)] - 2.0f * cur[i] + cur[vel.index(ix, iy - 1, iz)]) / (dy * dy);
-        const float d2z = (cur[vel.index(ix, iy, iz + 1)] - 2.0f * cur[i] + cur[vel.index(ix, iy, iz - 1)]) / (dz * dz);
-        const float lap = d2x + d2y + d2z;
-        const float v = vel.raw()[i];
-        nxt[i] = (2.0f * cur[i] - prev[i] + (v * v) * (dt * dt) * lap) * damp[i];
-      }
-    }
-  }
-}
-
 void forward_source_propagation(const GridModel2D& model, const RtmConfig& cfg, const Volume3D& vel,
                                 const std::vector<float>& damp, const std::vector<float>& wavelet,
                                 std::size_t sx, std::size_t sy, std::size_t sz,
@@ -49,7 +30,7 @@ void forward_source_propagation(const GridModel2D& model, const RtmConfig& cfg, 
   std::vector<float> src_prev(n, 0.0f), src_cur(n, 0.0f), src_nxt(n, 0.0f);
 
   for (std::size_t it = 0; it < cfg.nt; ++it) {
-    step_fd3d(vel, damp, cfg.dt, model.dx, cfg.dy, model.dz, src_prev, src_cur, src_nxt);
+    rtm_internal::step_fd3d(vel, damp, cfg.dt, model.dx, cfg.dy, model.dz, src_prev, src_cur, src_nxt);
     src_nxt[vel.index(sx, sy, sz)] += wavelet[it];
 
     rtm_internal::record_receivers(vel, sy, sz, rx, src_nxt, rec_data, it);
@@ -72,7 +53,7 @@ void receiver_backpropagation_and_imaging(const GridModel2D& model, const RtmCon
 
   for (std::size_t rit = 0; rit < cfg.nt; ++rit) {
     const std::size_t it = cfg.nt - 1 - rit;
-    step_fd3d(vel, damp, cfg.dt, model.dx, cfg.dy, model.dz, rec_prev, rec_cur, rec_nxt);
+    rtm_internal::step_fd3d(vel, damp, cfg.dt, model.dx, cfg.dy, model.dz, rec_prev, rec_cur, rec_nxt);
 
     rtm_internal::inject_receivers(vel, sy, sz, rx, rec_data, it, rec_nxt);
 

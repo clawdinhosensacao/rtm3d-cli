@@ -8,6 +8,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRTM3D_BUILD_TESTS=ON && cmake -
 python3 scripts/generate_synthetic_model.py --out-dir data/synthetic
 ./build/rtm3d_cli --config configs/synthetic_benchmark.json
 python3 scripts/float32_to_png.py --input artifacts/synthetic_migrated_inline.bin --meta artifacts/synthetic_migrated_inline.bin.json --output artifacts/synthetic_migrated_inline.png
+python3 scripts/visualize_synthetic.py --data-dir data/synthetic --out-dir artifacts/synthetic_preview --shot-index 1
 ```
 
 Generated artifacts:

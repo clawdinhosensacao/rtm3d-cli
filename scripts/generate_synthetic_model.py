@@ -38,6 +38,7 @@ class GatherMeta:
     n_receivers: int
     nt: int
     dt: float
+    shot_index: int
     shot_x: float
     shot_z: float
     receiver_x0: float
@@ -116,10 +117,10 @@ def build_velocity(nx: int, nz: int, dx: float, dz: float, seed: int,
 
 
 def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float, f0: float, seed: int,
-                      snr_db: float) -> Tuple[np.ndarray, GatherMeta]:
+                      snr_db: float, shot_ix: int | None = None, shot_index: int = 1) -> Tuple[np.ndarray, GatherMeta]:
     nz, nx = vel.shape
     nrec = max(24, nx // 2)
-    shot_ix = nx // 2
+    shot_ix = int(nx // 2 if shot_ix is None else shot_ix)
     shot_iz = 2
 
     rec_ix0 = 2
@@ -163,6 +164,7 @@ def synthesize_gather(vel: np.ndarray, dx: float, dz: float, nt: int, dt: float,
         n_receivers=int(nrec),
         nt=int(nt),
         dt=float(dt),
+        shot_index=int(shot_index),
         shot_x=float(shot_ix * dx),
         shot_z=float(shot_iz * dz),
         receiver_x0=float(rec_ix[0] * dx),
@@ -225,6 +227,7 @@ def main() -> int:
     ap.add_argument("--scenario", choices=["layered_fault", "salt_dome", "circle_lens"], default="salt_dome",
                     help="Synthetic structural scenario")
     ap.add_argument("--snr-db", type=float, default=26.0, help="Target SNR (dB) for additive random noise")
+    ap.add_argument("--n-shots", type=int, default=1, help="Number of synthetic shots to generate")
     ap.add_argument("--no-salt", action="store_true", help="Disable salt-like high-velocity body")
     args = ap.parse_args()
 
@@ -248,12 +251,18 @@ def main() -> int:
         json.dumps(asdict(ModelMeta(args.nx, args.nz, args.dx, args.dz, args.scenario)), indent=2)
     )
 
-    gather, gmeta = synthesize_gather(vel, args.dx, args.dz, args.nt, args.dt, args.f0,
-                                     seed=args.seed, snr_db=args.snr_db)
-    (out / "shot_0001_gather.bin").write_bytes(gather.astype("<f4", copy=False).tobytes())
-    (out / "shot_0001_gather.bin.json").write_text(json.dumps(asdict(gmeta), indent=2))
+    if args.n_shots < 1:
+        raise ValueError("--n-shots must be >= 1")
 
-    write_segy_like(out / "shot_0001.segy_like", gather, gmeta)
+    shot_positions = np.linspace(2, args.nx - 3, args.n_shots, dtype=np.int32)
+    for i, s_ix in enumerate(shot_positions, start=1):
+        gather, gmeta = synthesize_gather(vel, args.dx, args.dz, args.nt, args.dt, args.f0,
+                                          seed=args.seed + i - 1, snr_db=args.snr_db,
+                                          shot_ix=int(s_ix), shot_index=i)
+        stem = f"shot_{i:04d}"
+        (out / f"{stem}_gather.bin").write_bytes(gather.astype("<f4", copy=False).tobytes())
+        (out / f"{stem}_gather.bin.json").write_text(json.dumps(asdict(gmeta), indent=2))
+        write_segy_like(out / f"{stem}.segy_like", gather, gmeta)
 
     print(f"Synthetic benchmark written to {out}")
     return 0

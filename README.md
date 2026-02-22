@@ -61,10 +61,26 @@ This avoids adding new dependencies while keeping exchange-friendly structure do
 `rtm3d_cli` supports config JSON with `data_dir` / `x_file` / `z_file` / `values_file` (no hardcoded runtime paths).
 See `configs/synthetic_benchmark.json`.
 
+## Benchmark recipes
+
+Small/fast profile (local quick checks):
+```bash
+python3 scripts/generate_synthetic_model.py --out-dir data/synthetic --nx 128 --nz 80 --nt 220 --n-shots 2 --scenario layered_fault --seed 17
+./build/rtm3d_cli --config configs/synthetic_benchmark.json
+python3 scripts/visualize_synthetic.py --data-dir data/synthetic --out-dir artifacts/synthetic_preview --shot-index 1
+```
+
+Medium profile (richer structure + multi-shot):
+```bash
+python3 scripts/generate_synthetic_model.py --out-dir data/synthetic --nx 192 --nz 112 --nt 420 --n-shots 3 --scenario salt_dome --snr-db 24 --seed 17
+./build/rtm3d_cli --config configs/synthetic_benchmark.json
+python3 scripts/visualize_synthetic.py --data-dir data/synthetic --out-dir artifacts/synthetic_preview --shot-index 2
+```
+
 ## Tests
 Unit + e2e:
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-E2E test (`tests/e2e_synthetic.sh`) validates: generation → migration of one shot setup → existence of outputs, shape consistency, finite values, non-zero energy.
+E2E test (`tests/e2e_synthetic.sh`) validates generation determinism, multi-shot artifacts, migration output integrity, and quality/stability metrics.

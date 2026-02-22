@@ -12,11 +12,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import struct
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple
 
 import numpy as np
 
